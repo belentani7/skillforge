@@ -336,7 +336,7 @@ def cmd_init(args):
     content = content.replace("{{author}}", os.environ.get("USER", os.environ.get("USERNAME", "your-username")))
 
     skill_dir.mkdir(parents=True)
-    (skill_dir / "skill.yaml").write_text(content)
+    (skill_dir / "skill.yaml").write_text(content, encoding="utf-8")
 
     print(f"  ✅ Created {skill_dir / 'skill.yaml'}")
     print()
