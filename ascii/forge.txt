@@ -1,0 +1,22 @@
+
+        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+        ⣿⣿⣿⡿⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⠛⢿⣿⣿⣿
+        ⣿⣿⣿⡇   ⚒️  SKILLFORGE  ⚒️   ⢸⣿⣿⣿
+        ⣿⣿⣿⡇                          ⢸⣿⣿⣿
+        ⣿⣿⣿⡇  The Universal AI Skill  ⢸⣿⣿⣿
+        ⣿⣿⣿⡇    Package Manager       ⢸⣿⣿⣿
+        ⣿⣿⣿⡇                          ⢸⣿⣿⣿
+        ⣿⣿⣿⡇  Write Once. Forge All.  ⢸⣿⣿⣿
+        ⣿⣿⣿⣧⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣸⣿⣿⣿
+        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+        ⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
+
+     ╔══════════════════════════════════════════╗
+     ║        ⚒️  THE FORGE IS LIT  ⚒️          ║
+     ║                                          ║
+     ║  Craft spells for your AI agents.        ║
+     ║  Install skills across every tool.       ║
+     ║  Enchant the community.                  ║
+     ╚══════════════════════════════════════════╝
+

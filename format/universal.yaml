@@ -1,0 +1,78 @@
+# ═══════════════════════════════════════════════════════════════
+# ⚒️ SkillForge — Universal Skill Format Specification
+# ═══════════════════════════════════════════════════════════════
+#
+# This file defines the canonical YAML structure for SkillForge skills.
+# A skill is a self-contained instruction set that teaches AI coding agents
+# how to perform a specific task.
+#
+# Required fields: name, version, description, content.prompt
+# Optional fields: author, tags, tools, content.examples, content.constraints
+#
+# ═══════════════════════════════════════════════════════════════
+
+name: example-skill          # Unique identifier (lowercase, hyphens)
+version: 1.0.0               # Semantic version (major.minor.patch)
+author: your-username         # GitHub username or org name
+description: >                # One-line description shown in search results
+  A brief description of what this skill does.
+  Keep it under 120 characters.
+
+tags:                         # Classification tags (for search/filter)
+  - category                  # e.g., code-quality, testing, devops
+  - language                  # e.g., python, javascript, rust
+  - domain                    # e.g., frontend, backend, security
+
+tools:                        # Which AI tools this skill supports
+  - claude                    # Claude Code (slash commands)
+  - codex                     # Codex (AGENTS.md instructions)
+  - aider                     # Aider (conventions.md)
+  - qwen                      # Qwen Code (QWEN.md skills)
+  - gemini                    # Gemini CLI (system prompts)
+
+# ── Dependencies ──────────────────────────────────────────────
+# Other skills this skill requires (installed automatically)
+dependencies: []
+# - another-skill@^1.0.0
+
+content:
+  # ── Prompt (required) ──────────────────────────────────────
+  # The core instruction set. This is what gets converted to each tool's format.
+  # Use YAML multiline (|) for long prompts.
+  prompt: |
+    You are an expert at [domain]. When asked to [task]:
+
+    1. First, understand the requirements
+    2. Then, plan your approach
+    3. Implement the solution
+    4. Verify the result
+
+    Always follow these principles:
+    - Principle A
+    - Principle B
+    - Principle C
+
+  # ── Examples (optional) ────────────────────────────────────
+  # Input/output pairs that demonstrate the skill in action.
+  # Helps the AI understand expected behavior.
+  examples:
+    - input: "Example user request"
+      output: "Example of how the skill should respond"
+    - input: "Another example request"
+      output: "Another example response"
+
+  # ── Constraints (optional) ─────────────────────────────────
+  # Hard rules the AI must follow when using this skill.
+  # These are injected as MUST/NEVER directives.
+  constraints:
+    - "Always validate input before processing"
+    - "Never modify files outside the project directory"
+    - "Ask for clarification when requirements are ambiguous"
+
+# ── Metadata (optional) ──────────────────────────────────────
+# Additional metadata for the registry
+metadata:
+  license: MIT
+  homepage: https://github.com/your-username/your-skill
+  changelog: |
+    1.0.0 - Initial release

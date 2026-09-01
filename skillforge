@@ -1,0 +1,446 @@
+#!/usr/bin/env python3
+"""
+⚒️ SkillForge — The Universal AI Skill Package Manager
+Install coding skills into Claude Code, Codex, Aider, Qwen Code, and Gemini CLI.
+Write once. Use everywhere.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sqlite3
+import sys
+import textwrap
+from pathlib import Path
+
+# ── Bootstrap paths ───────────────────────────────────────────
+FORGE_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(FORGE_DIR))
+
+from engine.installer import Installer
+from engine.registry import Registry
+from engine.converters import ConverterEngine
+
+# ── Constants ─────────────────────────────────────────────────
+VERSION = "1.0.0"
+DB_PATH = FORGE_DIR / "local.db"
+CONFIG_PATH = FORGE_DIR / "config" / "default.yaml"
+USER_CONFIG_PATH = FORGE_DIR / "config" / "user.yaml"
+
+
+def get_db() -> sqlite3.Connection:
+    """Get or create the local SQLite cache."""
+    db = sqlite3.connect(str(DB_PATH))
+    # Always ensure schema exists (CREATE IF NOT EXISTS is idempotent)
+    schema_path = FORGE_DIR / "database" / "schema.sql"
+    if schema_path.exists():
+        db.executescript(schema_path.read_text(encoding="utf-8"))
+        db.commit()
+    return db
+
+
+def load_config() -> dict:
+    """Load configuration (user overrides default)."""
+    config = _parse_simple_yaml(CONFIG_PATH)
+    if USER_CONFIG_PATH.exists():
+        user = _parse_simple_yaml(USER_CONFIG_PATH)
+        config.update(user)
+    return config
+
+
+def _parse_simple_yaml(path: Path) -> dict:
+    """Minimal YAML parser for flat config (stdlib only, no PyYAML)."""
+    result = {}
+    if not path.exists():
+        return result
+    current_section = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if ":" in stripped:
+            key, _, val = stripped.partition(":")
+            key = key.strip()
+            val = val.strip()
+            if val:
+                # Parse booleans and numbers
+                if val.lower() == "true":
+                    val = True
+                elif val.lower() == "false":
+                    val = False
+                elif val.isdigit():
+                    val = int(val)
+                result[key] = val
+                current_section = None
+            else:
+                current_section = key
+                result[key] = {}
+        elif current_section and stripped.startswith("- "):
+            if isinstance(result.get(current_section), list) or not result.get(current_section):
+                if not isinstance(result.get(current_section), list):
+                    result[current_section] = []
+                result[current_section].append(stripped[2:].strip())
+        elif current_section and ":" in stripped:
+            key, _, val = stripped.partition(":")
+            if not isinstance(result.get(current_section), dict):
+                result[current_section] = {}
+            v = val.strip()
+            if v.lower() == "true":
+                v = True
+            elif v.lower() == "false":
+                v = False
+            result[current_section][key.strip()] = v
+    return result
+
+
+def print_banner():
+    """Print the forge ASCII art banner."""
+    banner_path = FORGE_DIR / "ascii" / "forge.txt"
+    if banner_path.exists():
+        print(banner_path.read_text(encoding="utf-8"))
+    else:
+        print("⚒️  SkillForge")
+
+
+def print_skill_card(skill: dict):
+    """Pretty-print a skill result."""
+    name = skill.get("name", "unknown")
+    version = skill.get("version", "?.?.?")
+    author = skill.get("author", "unknown")
+    desc = skill.get("description", "No description")
+    stars = skill.get("stars", 0)
+    downloads = skill.get("downloads", 0)
+
+    print(f"  ⚒️  {name} v{version}")
+    print(f"     by {author}")
+    print(f"     {desc}")
+    tags = skill.get("tags", [])
+    if tags:
+        print(f"     🏷️  {', '.join(tags)}")
+    print(f"     ⭐ {stars}  📥 {downloads}")
+    print()
+
+
+# ── Commands ──────────────────────────────────────────────────
+
+def cmd_search(args):
+    """Search the grimoire for skills."""
+    query = args.query
+    print(f"\n🔍 Searching the grimoire for \"{query}\"...\n")
+
+    registry = Registry(get_db(), load_config())
+    results = registry.search(query)
+
+    if not results:
+        print("  No spells found matching your query.")
+        print("  Try a different search term or browse popular skills:")
+        print("  skillforge search review")
+        return
+
+    print(f"  Found {len(results)} spell(s):\n")
+    for skill in results:
+        print_skill_card(skill)
+
+    print(f"  Install with: skillforge install <name>")
+
+
+def cmd_install(args):
+    """Install a skill into all detected AI tools."""
+    name = args.skill
+    print(f"\n⚒️  Forging spell: {name}...\n")
+
+    config = load_config()
+    db = get_db()
+    registry = Registry(db, config)
+    installer = Installer(db, config)
+
+    # Fetch skill from registry
+    skill = registry.fetch(name)
+    if not skill:
+        print(f"  ❌ Spell \"{name}\" not found in the grimoire.")
+        print(f"  Try: skillforge search {name}")
+        return
+
+    # Detect active tools
+    tools = installer.detect_tools()
+    if not tools:
+        print("  ⚠️  No AI tools detected. Installing to all tool directories.")
+        tools = ["claude", "codex", "aider", "qwen", "gemini"]
+
+    # Convert and install for each tool
+    converter = ConverterEngine()
+    installed_to = []
+
+    for tool in tools:
+        tool_config = config.get("tools", {}).get(tool, True)
+        if tool_config is False:
+            print(f"  ⬜ {tool} (disabled in config)")
+            continue
+
+        try:
+            content = converter.convert(skill, tool)
+            path = installer.install(tool, name, content)
+            installed_to.append(f"  ✅ {tool} → {path}")
+        except Exception as e:
+            installed_to.append(f"  ❌ {tool} → {e}")
+
+    # Record in database
+    registry.record_install(name, skill.get("version", "1.0.0"))
+
+    print("  Installed to:")
+    for line in installed_to:
+        print(line)
+    print(f"\n  ⚒️  Spell \"{name}\" is now active in {len([l for l in installed_to if '✅' in l])} tool(s).")
+
+
+def cmd_list(args):
+    """List installed skills."""
+    print("\n📜 Installed Spells:\n")
+
+    db = get_db()
+    cursor = db.execute(
+        "SELECT name, version, installed_at, tools_installed "
+        "FROM installed_skills ORDER BY installed_at DESC"
+    )
+    rows = cursor.fetchall()
+
+    if not rows:
+        print("  No spells installed yet.")
+        print("  Search the grimoire: skillforge search <query>")
+        return
+
+    for name, version, installed_at, tools_json in rows:
+        tools = json.loads(tools_json) if tools_json else []
+        tool_icons = " ".join(f"[{t}]" for t in tools)
+        print(f"  ⚒️  {name} v{version}  {tool_icons}")
+        print(f"     installed {installed_at}")
+        print()
+
+    print(f"  Total: {len(rows)} spell(s)")
+
+
+def cmd_uninstall(args):
+    """Remove a skill from all tools."""
+    name = args.skill
+    print(f"\n🔥 Unforging spell: {name}...\n")
+
+    config = load_config()
+    db = get_db()
+    installer = Installer(db, config)
+
+    removed = installer.uninstall(name)
+
+    if removed:
+        db.execute("DELETE FROM installed_skills WHERE name = ?", (name,))
+        db.commit()
+        print(f"  ✅ Removed from {len(removed)} location(s):")
+        for path in removed:
+            print(f"     {path}")
+    else:
+        print(f"  ⚠️  Spell \"{name}\" not found in local installation.")
+
+    print()
+
+
+def cmd_publish(args):
+    """Publish a skill to the community registry."""
+    path = Path(args.path).resolve()
+    print(f"\n✨ Enchanting the community with: {path.name}...\n")
+
+    skill_file = path / "skill.yaml" if path.is_dir() else path
+    if not skill_file.exists():
+        print(f"  ❌ No skill.yaml found at {skill_file}")
+        print("  Create one with: skillforge init my-skill")
+        return
+
+    # Validate skill format
+    from engine.registry import validate_skill_yaml
+    errors = validate_skill_yaml(skill_file)
+    if errors:
+        print("  ❌ Validation errors:")
+        for err in errors:
+            print(f"     • {err}")
+        return
+
+    print("  ✅ Skill format valid")
+    print("  📤 To publish, push your skill to a GitHub repo with topic: ai-skill")
+    print("     The registry auto-indexes repos with this topic.")
+    print()
+    print("  Quick publish:")
+    print(f"     cd {path}")
+    print("     git init && git add . && git commit -m '⚒️ New skill'")
+    print("     gh repo create --public --source=. --push")
+    print("     gh repo edit --add-topic ai-skill")
+    print()
+
+
+def cmd_update(args):
+    """Update all installed skills to latest versions."""
+    print("\n🔄 Checking for spell updates...\n")
+
+    db = get_db()
+    config = load_config()
+    registry = Registry(db, config)
+    installer = Installer(db, config)
+    converter = ConverterEngine()
+
+    cursor = db.execute("SELECT name, version FROM installed_skills")
+    installed = cursor.fetchall()
+
+    if not installed:
+        print("  No spells installed. Nothing to update.")
+        return
+
+    updated = 0
+    for name, current_version in installed:
+        latest = registry.check_version(name)
+        if latest and latest != current_version:
+            print(f"  📦 {name}: v{current_version} → v{latest}")
+            skill = registry.fetch(name)
+            if skill:
+                tools = installer.detect_tools() or ["claude", "codex", "aider", "qwen", "gemini"]
+                for tool in tools:
+                    try:
+                        content = converter.convert(skill, tool)
+                        installer.install(tool, name, content)
+                    except Exception:
+                        pass
+                registry.record_install(name, latest)
+                updated += 1
+        else:
+            print(f"  ✅ {name}: up to date (v{current_version})")
+
+    print(f"\n  {updated} spell(s) updated.")
+
+
+def cmd_init(args):
+    """Create a new skill from template."""
+    name = args.name
+    skill_dir = Path.cwd() / name
+    print(f"\n📝 Crafting new spell: {name}...\n")
+
+    if skill_dir.exists():
+        print(f"  ❌ Directory already exists: {skill_dir}")
+        return
+
+    # Load template
+    template_path = FORGE_DIR / "templates" / "basic.skill"
+    if template_path.exists():
+        content = template_path.read_text(encoding="utf-8")
+    else:
+        content = _default_template()
+
+    # Substitute name
+    content = content.replace("{{name}}", name)
+    content = content.replace("{{author}}", os.environ.get("USER", os.environ.get("USERNAME", "your-username")))
+
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "skill.yaml").write_text(content)
+
+    print(f"  ✅ Created {skill_dir / 'skill.yaml'}")
+    print()
+    print("  Next steps:")
+    print(f"     cd {name}")
+    print("     # Edit skill.yaml with your skill content")
+    print("     skillforge publish .")
+    print()
+
+
+def _default_template() -> str:
+    return """name: {{name}}
+version: 1.0.0
+author: {{author}}
+description: A powerful AI coding skill
+tags: []
+tools: [claude, codex, aider, qwen, gemini]
+content:
+  prompt: |
+    Your skill prompt here.
+    Describe what this skill teaches the AI agent to do.
+  examples: []
+  constraints: []
+"""
+
+
+# ── Main ──────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="skillforge",
+        description="⚒️ SkillForge — The Universal AI Skill Package Manager",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""\
+            The Forge is lit. Craft your spells.
+
+            Examples:
+              skillforge search code-review     Search the grimoire
+              skillforge install code-review    Install a spell
+              skillforge list                   List installed spells
+              skillforge update                 Update all spells
+              skillforge init my-skill          Craft a new spell
+              skillforge publish ./my-skill     Enchant the community
+        """),
+    )
+    parser.add_argument("-v", "--version", action="version", version=f"skillforge {VERSION}")
+
+    sub = parser.add_subparsers(dest="command", help="Command to execute")
+
+    # search
+    p_search = sub.add_parser("search", help="Search the grimoire for skills")
+    p_search.add_argument("query", help="Search query")
+
+    # install
+    p_install = sub.add_parser("install", help="Install a skill into all AI tools")
+    p_install.add_argument("skill", help="Skill name to install")
+
+    # list
+    sub.add_parser("list", help="List installed skills")
+
+    # uninstall
+    p_uninstall = sub.add_parser("uninstall", help="Remove a skill from all tools")
+    p_uninstall.add_argument("skill", help="Skill name to remove")
+
+    # publish
+    p_publish = sub.add_parser("publish", help="Publish a skill to the registry")
+    p_publish.add_argument("path", help="Path to skill directory or file")
+
+    # update
+    sub.add_parser("update", help="Update all installed skills")
+
+    # init
+    p_init = sub.add_parser("init", help="Create a new skill from template")
+    p_init.add_argument("name", help="Name for the new skill")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        print_banner()
+        parser.print_help()
+        return
+
+    commands = {
+        "search": cmd_search,
+        "install": cmd_install,
+        "list": cmd_list,
+        "uninstall": cmd_uninstall,
+        "publish": cmd_publish,
+        "update": cmd_update,
+        "init": cmd_init,
+    }
+
+    try:
+        commands[args.command](args)
+    except KeyboardInterrupt:
+        print("\n  Cancelled.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n  ❌ Error: {e}")
+        if os.environ.get("SKILLFORGE_DEBUG"):
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,202 @@
+{
+  "version": "1.0.0",
+  "updated": "2026-09-01",
+  "skills": [
+    {
+      "name": "code-review",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Comprehensive code review: correctness, performance, security, best practices",
+      "tags": ["code-quality", "review", "best-practices", "security"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 342,
+      "downloads": 12500,
+      "content": {
+        "prompt": "Perform a comprehensive code review. Analyze for:\n\n1. **Correctness** — Logic errors, edge cases, null safety, off-by-one errors\n2. **Performance** — Unnecessary allocations, N+1 queries, missing indexes, algorithmic complexity\n3. **Security** — Input validation, injection risks, auth checks, secrets in code\n4. **Best practices** — Naming, structure, DRY violations, SOLID principles\n5. **Readability** — Comments, complexity, naming clarity\n\nFor each issue found:\n- State the problem clearly\n- Explain WHY it matters\n- Suggest a concrete fix\n- Rate severity: 🔴 critical / 🟡 warning / 🔵 suggestion",
+        "constraints": [
+          "Always provide specific line or function references",
+          "Suggest fixes, not just problems",
+          "Prioritize findings by impact",
+          "Be constructive, not condescending"
+        ],
+        "examples": [
+          {
+            "input": "Review this authentication middleware",
+            "output": "Found 3 issues: 🔴 Token not validated before decode, 🟡 No rate limiting on login endpoint, 🔵 Consider extracting auth logic to a separate service"
+          }
+        ]
+      }
+    },
+    {
+      "name": "test-driven",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Test-driven development workflow: write tests first, then implement",
+      "tags": ["testing", "tdd", "quality", "workflow"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 287,
+      "downloads": 8900,
+      "content": {
+        "prompt": "Follow Test-Driven Development for this task:\n\n1. **Red** — Write a failing test that describes the desired behavior\n2. **Green** — Write the minimum code to make the test pass\n3. **Refactor** — Clean up while keeping all tests green\n\nBefore writing any implementation code:\n- Identify the behavior to test\n- Write the test first\n- Run the test to confirm it fails\n- Then implement",
+        "constraints": [
+          "Never write implementation before tests",
+          "Each test should test one behavior",
+          "Tests must be deterministic",
+          "Clean up test fixtures"
+        ]
+      }
+    },
+    {
+      "name": "git-commit",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Generate conventional commit messages from staged changes",
+      "tags": ["git", "commits", "conventional-commits", "workflow"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 256,
+      "downloads": 15200,
+      "content": {
+        "prompt": "Generate a conventional commit message for the staged changes:\n\nFormat: <type>(<scope>): <subject>\n\nTypes: feat, fix, docs, style, refactor, perf, test, chore, ci\n\nRules:\n- Subject: imperative mood, lowercase, no period, ≤50 chars\n- Body: explain WHAT and WHY (not HOW), wrap at 72 chars\n- Include BREAKING CHANGE footer when applicable",
+        "constraints": [
+          "Subject line must be ≤50 characters",
+          "Use imperative mood in subject",
+          "No period at end of subject",
+          "Include scope when changes are localized"
+        ]
+      }
+    },
+    {
+      "name": "debug",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Systematic debugging: reproduce, isolate, identify root cause, fix",
+      "tags": ["debugging", "troubleshooting", "diagnosis"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 198,
+      "downloads": 7600,
+      "content": {
+        "prompt": "Debug this issue systematically:\n\n1. **Reproduce** — Confirm the bug exists and document exact steps\n2. **Isolate** — Narrow down to the smallest failing case\n3. **Hypothesize** — List possible root causes ranked by likelihood\n4. **Test** — Verify each hypothesis with targeted checks\n5. **Fix** — Apply the narrowest fix that addresses the root cause\n6. **Verify** — Confirm the fix and check for regressions",
+        "constraints": [
+          "Never guess without evidence",
+          "Document what you tried and what it showed",
+          "Fix the root cause, not the symptom",
+          "Add a regression test"
+        ]
+      }
+    },
+    {
+      "name": "api-design",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "RESTful API design following industry best practices",
+      "tags": ["api", "rest", "design", "backend"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 175,
+      "downloads": 6300,
+      "content": {
+        "prompt": "Design or review this API following REST best practices:\n\n- Use nouns for resources, verbs only for actions\n- Proper HTTP methods: GET (read), POST (create), PUT (replace), PATCH (update), DELETE\n- Consistent URL patterns: /api/v1/resources/:id\n- Standard response format with proper status codes\n- Pagination for collections\n- Versioning via URL path\n- Proper error responses with codes and messages",
+        "constraints": [
+          "Never use verbs in resource URLs",
+          "Always return consistent response envelopes",
+          "Use 4xx for client errors, 5xx for server errors",
+          "Include HATEOAS links where practical"
+        ]
+      }
+    },
+    {
+      "name": "security-audit",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Security-focused code audit: OWASP Top 10, dependency scanning, hardening",
+      "tags": ["security", "audit", "owasp", "hardening"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 163,
+      "downloads": 5400,
+      "content": {
+        "prompt": "Perform a security audit of this code:\n\nCheck for OWASP Top 10 vulnerabilities:\n1. Injection (SQL, NoSQL, OS command, LDAP)\n2. Broken authentication and session management\n3. Sensitive data exposure\n4. XML External Entities (XXE)\n5. Broken access control\n6. Security misconfiguration\n7. Cross-Site Scripting (XSS)\n8. Insecure deserialization\n9. Using components with known vulnerabilities\n10. Insufficient logging and monitoring",
+        "constraints": [
+          "Rate each finding by severity (CVSS-style)",
+          "Provide proof of concept for exploitable issues",
+          "Suggest specific remediation code",
+          "Check both code and configuration"
+        ]
+      }
+    },
+    {
+      "name": "refactor",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Safe refactoring: preserve behavior while improving structure",
+      "tags": ["refactoring", "code-quality", "architecture"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 144,
+      "downloads": 4800,
+      "content": {
+        "prompt": "Refactor this code while preserving behavior:\n\n1. **Snapshot** — Understand current behavior completely\n2. **Plan** — Identify the structural improvement to make\n3. **Small steps** — Make incremental changes, verify after each\n4. **Verify** — Run tests, check outputs match original\n\nRefactoring techniques to consider:\n- Extract method/function\n- Inline method (reduce indirection)\n- Move method to appropriate class/module\n- Replace conditional with polymorphism\n- Introduce parameter object",
+        "constraints": [
+          "Behavior must not change — tests must still pass",
+          "Make one structural change at a time",
+          "Verify after each change",
+          "Document what changed and why"
+        ]
+      }
+    },
+    {
+      "name": "documentation",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Generate clear, useful documentation from code",
+      "tags": ["documentation", "docs", "readme", "comments"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 132,
+      "downloads": 9100,
+      "content": {
+        "prompt": "Generate documentation for this code:\n\n- **README** — What it does, quick start, API reference\n- **Docstrings** — Purpose, parameters, return values, examples\n- **Architecture docs** — How components interact\n- **API docs** — Endpoints, parameters, responses, examples\n\nPrioritize clarity over completeness. Show examples first, explain details second.",
+        "constraints": [
+          "Every public function needs a docstring",
+          "Include at least one usage example",
+          "Keep README under 500 lines",
+          "Use consistent formatting"
+        ]
+      }
+    },
+    {
+      "name": "performance",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Performance optimization: profiling, bottleneck identification, tuning",
+      "tags": ["performance", "optimization", "profiling", "speed"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 121,
+      "downloads": 3900,
+      "content": {
+        "prompt": "Optimize the performance of this code:\n\n1. **Measure** — Profile before optimizing (identify the actual bottleneck)\n2. **Analyze** — Understand the algorithmic complexity\n3. **Optimize** — Target the hottest path first\n4. **Verify** — Benchmark to confirm improvement\n\nCommon optimizations:\n- Replace O(n²) with O(n log n) algorithms\n- Add caching for repeated computations\n- Batch I/O operations\n- Use appropriate data structures\n- Eliminate unnecessary allocations",
+        "constraints": [
+          "Always measure before and after",
+          "Optimize the bottleneck, not the fast path",
+          "Don't sacrifice readability for micro-optimizations",
+          "Document the performance improvement"
+        ]
+      }
+    },
+    {
+      "name": "migration",
+      "version": "1.0.0",
+      "author": "skillforge",
+      "description": "Safe database and API migrations with rollback plans",
+      "tags": ["migration", "database", "deployment", "devops"],
+      "tools": ["claude", "codex", "aider", "qwen", "gemini"],
+      "stars": 98,
+      "downloads": 2700,
+      "content": {
+        "prompt": "Plan and execute this migration safely:\n\n1. **Analyze** — What's changing and what could break\n2. **Backward compatible** — New code must work with old schema\n3. **Dual write** — Write to both old and new during transition\n4. **Migrate data** — Move existing data to new format\n5. **Switch reads** — Point reads to new format\n6. **Cleanup** — Remove old format\n7. **Rollback plan** — Document exactly how to undo",
+        "constraints": [
+          "Every migration must be reversible",
+          "Test with production-scale data volumes",
+          "Zero-downtime where possible",
+          "Document rollback procedure"
+        ]
+      }
+    }
+  ]
+}
