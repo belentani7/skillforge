@@ -10,7 +10,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class Registry:
@@ -228,65 +228,110 @@ def _url_encode(s: str) -> str:
 def _parse_simple_yaml(text: str) -> Dict[str, Any]:
     """
     Minimal YAML parser for flat skill definitions (stdlib only).
-    Handles basic key: value, lists, and one level of nesting.
+    Handles basic key: value, lists, one level of nesting and `|` block
+    scalars. Nested keys are written into their parent mapping, so
+    `content.prompt` stays inside `content`.
     """
     result: Dict[str, Any] = {}
-    current_section = None
-    in_multiline = False
-    multiline_key = None
-    multiline_indent = 0
-    multiline_lines: List[str] = []
+
+    # (indent, container) for every mapping/sequence still open.
+    stack: List[Tuple[int, Any]] = []
+    # A key seen without a value; its container is decided by the next line.
+    pending: Optional[Tuple[int, str]] = None
+    # Active `|` block scalar: (target container, key, indent, lines).
+    block: Optional[Tuple[Any, str, int, List[str]]] = None
+
+    def container() -> Any:
+        return stack[-1][1] if stack else result
+
+    def close_to(indent: int) -> None:
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+
+    def value_container() -> Any:
+        """Container a plain `key: value` line belongs to."""
+        cont = container()
+        if isinstance(cont, list):
+            if not cont or not isinstance(cont[-1], dict):
+                cont.append({})
+            return cont[-1]
+        return cont
 
     for line in text.splitlines():
-        # Handle multiline strings (prompt: |)
-        if in_multiline:
-            stripped = line.rstrip()
-            if stripped and len(line) - len(line.lstrip()) > multiline_indent:
-                multiline_lines.append(line.lstrip())
+        indent = len(line) - len(line.lstrip())
+
+        # ── inside a `|` block scalar ──────────────────────────
+        if block is not None:
+            target, key, block_indent, lines = block
+            stripped_line = line.rstrip()
+            if stripped_line == "" or indent > block_indent:
+                lines.append(line.lstrip() if stripped_line else "")
                 continue
-            elif stripped == "" or len(line) - len(line.lstrip()) > multiline_indent:
-                multiline_lines.append("")
-                continue
-            else:
-                result[multiline_key] = "\n".join(multiline_lines).strip()
-                in_multiline = False
+            target[key] = "\n".join(lines).strip()
+            block = None
 
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
 
-        if ":" in stripped:
-            key, _, val = stripped.partition(":")
-            key = key.strip()
-            val = val.strip()
+        # ── a key without a value gets its container from this line ──
+        if pending is not None:
+            pindent, pkey = pending
+            is_item = stripped.startswith("- ")
+            parent = container()
+            if is_item or indent > pindent:
+                child: Any = [] if is_item else {}
+                if isinstance(parent, dict):
+                    parent[pkey] = child
+                elif isinstance(parent, list) and parent and isinstance(parent[-1], dict):
+                    parent[-1][pkey] = child
+                stack.append((pindent, child))
+            elif isinstance(parent, dict):
+                parent[pkey] = {}
+            pending = None
 
-            if val == "|":
-                # Start of multiline
-                in_multiline = True
-                multiline_key = key
-                multiline_indent = len(line) - len(line.lstrip())
-                multiline_lines = []
-                current_section = None
+        close_to(indent)
+
+        # ── sequence item ──────────────────────────────────────
+        if stripped.startswith("- "):
+            item = stripped[2:].strip()
+            cont = container()
+            if not isinstance(cont, list):
                 continue
-
-            if val:
-                # Handle inline lists [a, b, c]
-                if val.startswith("[") and val.endswith("]"):
-                    items = val[1:-1].split(",")
-                    result[key] = [i.strip() for i in items if i.strip()]
-                else:
-                    result[key] = val
-                current_section = None
+            if ":" in item:
+                if not cont or not isinstance(cont[-1], dict):
+                    cont.append({})
+                item_key, _, item_val = item.partition(":")
+                cont[-1][item_key.strip()] = item_val.strip()
             else:
-                current_section = key
-                result[key] = {}
-        elif current_section and stripped.startswith("- "):
-            if not isinstance(result.get(current_section), list):
-                result[current_section] = []
-            result[current_section].append(stripped[2:].strip())
+                cont.append(item)
+            continue
 
-    # Flush any remaining multiline
-    if in_multiline and multiline_key:
-        result[multiline_key] = "\n".join(multiline_lines).strip()
+        # ── key: value ─────────────────────────────────────────
+        if ":" not in stripped:
+            continue
+        key, _, val = stripped.partition(":")
+        key = key.strip()
+        val = val.strip()
+
+        if val == "|":
+            block = (value_container(), key, indent, [])
+            continue
+
+        if not val:
+            pending = (indent, key)
+            continue
+
+        target = value_container()
+        if val.startswith("[") and val.endswith("]"):
+            items = val[1:-1].split(",")
+            target[key] = [i.strip() for i in items if i.strip()]
+        else:
+            target[key] = val
+
+    # Flush any remaining block scalar
+    if block is not None:
+        target, key, _, lines = block
+        target[key] = "\n".join(lines).strip()
 
     return result
