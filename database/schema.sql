@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS skill_files (
     tool TEXT NOT NULL,
     file_path TEXT NOT NULL,
     installed_at TEXT NOT NULL,
+    content_sha256 TEXT,  -- checksum used to protect edited or foreign files
     UNIQUE(skill_name, tool)
 );
 
