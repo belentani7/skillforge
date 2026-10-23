@@ -111,8 +111,7 @@ def print_skill_card(skill: dict):
     version = skill.get("version", "?.?.?")
     author = skill.get("author", "unknown")
     desc = skill.get("description", "No description")
-    stars = skill.get("stars", 0)
-    downloads = skill.get("downloads", 0)
+    stars = skill.get("stars")
 
     print(f"  ⚒️  {name} v{version}")
     print(f"     by {author}")
@@ -120,7 +119,8 @@ def print_skill_card(skill: dict):
     tags = skill.get("tags", [])
     if tags:
         print(f"     🏷️  {', '.join(tags)}")
-    print(f"     ⭐ {stars}  📥 {downloads}")
+    if isinstance(stars, int) and stars >= 0:
+        print(f"     ⭐ {stars} GitHub stars")
     print()
 
 
