@@ -3,10 +3,12 @@ Installation engine — downloads, converts, and places skills into each AI tool
 """
 from __future__ import annotations
 
-import json
+import hashlib
 import os
-import shutil
+import re
 import sqlite3
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -70,81 +72,127 @@ class Installer:
 
         return detected
 
+    @staticmethod
+    def _validate_name(skill_name: str) -> None:
+        # One basename only: no path separators, dot-files or traversal.
+        if not isinstance(skill_name, str) or not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", skill_name
+        ):
+            raise ValueError("Unsafe skill name: expected a single filename-safe identifier")
+
+    @staticmethod
+    def _digest(content: bytes) -> str:
+        return hashlib.sha256(content).hexdigest()
+
+    def _ensure_digest_column(self) -> None:
+        """Migrate older SQLite installs without destroying their inventory."""
+        fields = {row[1] for row in self.db.execute("PRAGMA table_info(skill_files)")}
+        if "content_sha256" not in fields:
+            self.db.execute("ALTER TABLE skill_files ADD COLUMN content_sha256 TEXT")
+            self.db.commit()
+
     def install(self, tool: str, skill_name: str, content: str) -> Path:
-        """
-        Install skill content into the specified tool's directory.
+        """Install/upgrade only a file demonstrably owned by SkillForge.
 
-        Args:
-            tool: Tool identifier (claude, codex, aider, qwen, gemini)
-            skill_name: Name of the skill
-            content: Converted content string for this tool
-
-        Returns:
-            Path where the file was written
+        Manual files, symlinks, changed files and legacy installs without a
+        recorded checksum are never overwritten. New writes are exclusive;
+        updates are atomic and use the previous checksum as an ownership check.
         """
+        self._validate_name(skill_name)
         target_dir = TOOL_DIRS.get(tool)
-        if not target_dir:
+        if target_dir is None:
             raise ValueError(f"Unknown tool: {tool}")
+        if not isinstance(content, str):
+            raise TypeError("Skill content must be text")
+        self._ensure_digest_column()
 
-        # Ensure directory exists
         target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{skill_name}{self._get_extension(tool)}"
+        digest = self._digest(content.encode("utf-8"))
+        row = self.db.execute(
+            "SELECT file_path, content_sha256 FROM skill_files WHERE skill_name = ? AND tool = ?",
+            (skill_name, tool),
+        ).fetchone()
 
-        # Determine filename based on tool
-        ext = self._get_extension(tool)
-        filename = f"{skill_name}{ext}"
-        target_path = target_dir / filename
+        if target.is_symlink():
+            raise FileExistsError(f"Refusing to write through a symlink: {target}")
+        previous: bytes | None = None
+        if target.exists():
+            # Only an exact path and a digest-matched previous install may
+            # be updated. Never silently destroy a human-edited file.
+            if not target.is_file() or not row or row[0] != str(target) or not row[1]:
+                raise FileExistsError(f"File already exists and is not a verified SkillForge install: {target}")
+            previous = target.read_bytes()
+            if self._digest(previous) != row[1]:
+                raise FileExistsError(f"File has been modified; refusing overwrite: {target}")
+            if self._digest(previous) == digest:
+                return target
+            fd, temp_name = tempfile.mkstemp(dir=target_dir, prefix=".skillforge-")
+            try:
+                with os.fdopen(fd, "wb") as output:
+                    output.write(content.encode("utf-8"))
+                os.replace(temp_name, target)
+            finally:
+                if os.path.exists(temp_name):
+                    os.unlink(temp_name)
+        else:
+            # 'x' is exclusive: it also refuses dangling symlinks and races
+            # with an existing human file.
+            with target.open("x", encoding="utf-8") as output:
+                output.write(content)
 
-        # Write the content
-        target_path.write_text(content, encoding="utf-8")
-
-        # Record installation in database
-        self._record_tool_install(skill_name, tool, str(target_path))
-
-        return target_path
+        try:
+            self._record_tool_install(skill_name, tool, str(target), digest)
+        except Exception:
+            # Keep file and database states aligned if SQLite cannot commit.
+            if previous is None:
+                target.unlink(missing_ok=True)
+            else:
+                target.write_bytes(previous)
+            raise
+        return target
 
     def uninstall(self, skill_name: str) -> List[str]:
-        """
-        Remove a skill from all tool directories.
+        """Delete only registered, checksum-matched, unmodified skill files.
 
-        Returns:
-            List of paths that were removed
+        No wildcard scan: a similarly named file from another tool or an old
+        manually edited version is not ours to remove.
         """
-        removed = []
-
-        # Check database for known paths
-        cursor = self.db.execute(
-            "SELECT file_path FROM skill_files WHERE skill_name = ?",
+        self._validate_name(skill_name)
+        self._ensure_digest_column()
+        rows = self.db.execute(
+            "SELECT tool, file_path, content_sha256 FROM skill_files WHERE skill_name = ?",
             (skill_name,),
-        )
-        known_paths = [row[0] for row in cursor.fetchall()]
-
-        # Remove known paths
-        for path_str in known_paths:
-            path = Path(path_str)
-            if path.exists():
-                path.unlink()
-                removed.append(str(path))
-
-        # Also scan tool directories for any files matching the skill name
-        for tool, tool_dir in TOOL_DIRS.items():
-            if not tool_dir.exists():
+        ).fetchall()
+        removed: List[str] = []
+        for tool, path_str, expected_hash in rows:
+            root = TOOL_DIRS.get(tool)
+            if root is None:
                 continue
-            for ext in [".md", ".txt", ".yaml", ".yml", ".prompt"]:
-                candidate = tool_dir / f"{skill_name}{ext}"
-                if candidate.exists() and str(candidate) not in removed:
-                    candidate.unlink()
-                    removed.append(str(candidate))
-
-        # Clean up database records
-        self.db.execute(
-            "DELETE FROM skill_files WHERE skill_name = ?", (skill_name,)
-        )
+            path = Path(path_str)
+            expected_path = root / f"{skill_name}{self._get_extension(tool)}"
+            if path != expected_path or path.is_symlink():
+                continue
+            if not path.exists():
+                self.db.execute(
+                    "DELETE FROM skill_files WHERE skill_name = ? AND tool = ?",
+                    (skill_name, tool),
+                )
+                continue
+            if not path.is_file() or not expected_hash:
+                continue
+            if self._digest(path.read_bytes()) != expected_hash:
+                continue
+            path.unlink()
+            removed.append(str(path))
+            self.db.execute(
+                "DELETE FROM skill_files WHERE skill_name = ? AND tool = ?",
+                (skill_name, tool),
+            )
         self.db.commit()
-
         return removed
 
     def _get_extension(self, tool: str) -> str:
-        """Get the file extension for a given tool."""
         extensions = {
             "claude": ".md",
             "codex": ".md",
@@ -154,14 +202,15 @@ class Installer:
         }
         return extensions.get(tool, ".md")
 
-    def _record_tool_install(self, skill_name: str, tool: str, file_path: str):
-        """Record a file installation in the database."""
-        try:
-            self.db.execute(
-                "INSERT OR REPLACE INTO skill_files (skill_name, tool, file_path) "
-                "VALUES (?, ?, ?)",
-                (skill_name, tool, file_path),
-            )
-            self.db.commit()
-        except Exception:
-            pass  # Non-fatal if DB write fails
+    def _record_tool_install(self, skill_name: str, tool: str, file_path: str, digest: str) -> None:
+        # installed_at is NOT NULL in database/schema.sql.
+        now = datetime.now(timezone.utc).isoformat()
+        self.db.execute(
+            "INSERT INTO skill_files (skill_name, tool, file_path, installed_at, content_sha256) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(skill_name, tool) DO UPDATE SET "
+            "file_path=excluded.file_path, installed_at=excluded.installed_at, "
+            "content_sha256=excluded.content_sha256",
+            (skill_name, tool, file_path, now, digest),
+        )
+        self.db.commit()
