@@ -83,7 +83,7 @@ else
   mkdir -p -- "$BIN_DIR"
 fi
 LINK="$BIN_DIR/skillforge"
-if [[ ! -e "$LINK""bash:" "
+if [[ ! -e "$LINK" && ! -L "$LINK" ]]; then
 
   ln -s -- "$FORGE_DIR/skillforge" "$LINK"
 elif [[ ! -L "$LINK" || "$(readlink -- "$LINK")" != "$FORGE_DIR/skillforge" ]]; then
