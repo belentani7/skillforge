@@ -79,12 +79,11 @@ if [[ -d "$HOME/.local/bin" ]]; then
 elif [[ -d "$HOME/bin" ]]; then
   BIN_DIR="$HOME/bin"
 else
-  BIN_DIR="$HOME/bin"
+  BIN_DIR="$HOME/.local/bin"
   mkdir -p -- "$BIN_DIR"
 fi
 LINK="$BIN_DIR/skillforge"
 if [[ ! -e "$LINK" && ! -L "$LINK" ]]; then
-
   ln -s -- "$FORGE_DIR/skillforge" "$LINK"
 elif [[ ! -L "$LINK" || "$(readlink -- "$LINK")" != "$FORGE_DIR/skillforge" ]]; then
   printf 'WARNING: existing PATH entry left untouched: %s\n' "$LINK" >&2
