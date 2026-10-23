@@ -50,49 +50,51 @@ def load_config() -> dict:
 
 
 def _parse_simple_yaml(path: Path) -> dict:
-    """Minimal YAML parser for flat config (stdlib only, no PyYAML)."""
+    """Read the small flat/one-level config subset without losing tool flags.
+
+    This is intentionally not a general YAML parser. Unsupported structures
+    must not silently enable disabled tools.
+    """
     result = {}
     if not path.exists():
         return result
-    current_section = None
+
+    def scalar(raw: str):
+        value = raw.strip().strip('"').strip("'")
+        if value.lower() == "true":
+            return True
+        if value.lower() == "false":
+            return False
+        if value.isdigit():
+            return int(value)
+        return value
+
+    section = None
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        if ":" in stripped:
-            key, _, val = stripped.partition(":")
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            if ":" not in stripped:
+                continue
+            key, _, raw = stripped.partition(":")
             key = key.strip()
-            val = val.strip()
-            if val:
-                # Parse booleans and numbers
-                if val.lower() == "true":
-                    val = True
-                elif val.lower() == "false":
-                    val = False
-                elif val.isdigit():
-                    val = int(val)
-                result[key] = val
-                current_section = None
-            else:
-                current_section = key
+            if not raw.strip():
                 result[key] = {}
-        elif current_section and stripped.startswith("- "):
-            if isinstance(result.get(current_section), list) or not result.get(current_section):
-                if not isinstance(result.get(current_section), list):
-                    result[current_section] = []
-                result[current_section].append(stripped[2:].strip())
-        elif current_section and ":" in stripped:
-            key, _, val = stripped.partition(":")
-            if not isinstance(result.get(current_section), dict):
-                result[current_section] = {}
-            v = val.strip()
-            if v.lower() == "true":
-                v = True
-            elif v.lower() == "false":
-                v = False
-            result[current_section][key.strip()] = v
+                section = key
+            else:
+                result[key] = scalar(raw)
+                section = None
+        elif section and stripped.startswith("- "):
+            if result[section] == {}:
+                result[section] = []
+            if isinstance(result[section], list):
+                result[section].append(scalar(stripped[2:]))
+        elif section and ":" in stripped and isinstance(result[section], dict):
+            key, _, raw = stripped.partition(":")
+            result[section][key.strip()] = scalar(raw)
     return result
-
 
 def print_banner():
     """Print the forge ASCII art banner."""
@@ -165,8 +167,9 @@ def cmd_install(args):
     # Detect active tools
     tools = installer.detect_tools()
     if not tools:
-        print("  ⚠️  No AI tools detected. Installing to all tool directories.")
-        tools = ["claude", "codex", "aider", "qwen", "gemini"]
+        print("  ⚠️  No AI tools detected. Nothing was installed.")
+        print("  Configure an AI tool first, then retry.")
+        return
 
     # Convert and install for each tool
     converter = ConverterEngine()
@@ -269,11 +272,8 @@ def cmd_publish(args):
     print("  📤 To publish, push your skill to a GitHub repo with topic: ai-skill")
     print("     The registry auto-indexes repos with this topic.")
     print()
-    print("  Quick publish:")
-    print(f"     cd {path}")
-    print("     git init && git add . && git commit -m '⚒️ New skill'")
-    print("     gh repo create --public --source=. --push")
-    print("     gh repo edit --add-topic ai-skill")
+    print("  Review copyright, credentials, and personal data before any publication.")
+    print("  Publishing is a separate, manual, opt-in action; no repository is created here.")
     print()
 
 
