@@ -23,7 +23,7 @@ FORGE_DIR="$HOME/.skillforge"
 FILES=(skillforge install.sh README.md LICENSE config/default.yaml)
 for pattern in \
   "$REPO_DIR"/ascii/*.txt "$REPO_DIR"/database/*.sql \
-  "$REPO_DIR"/engine/*.py "$REPO_DIR"/format/*.py \
+  "$REPO_DIR"/engine/*.py "$REPO_DIR"/format/*.py "$REPO_DIR"/format/*.yaml \
   "$REPO_DIR"/registry/*.json "$REPO_DIR"/templates/*.skill; do
   [[ -f "$pattern" ]] || continue
   FILES+=("${pattern#"$REPO_DIR"/}")
