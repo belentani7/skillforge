@@ -63,9 +63,15 @@ class Registry:
             if r["name"] == name:
                 # Try to fetch the actual skill.yaml from the repo
                 remote = self._fetch_remote_skill(r.get("repo_url", ""), r.get("default_branch", "main"))
-                if remote:
+                if (isinstance(remote, dict)
+                        and remote.get("name") == name
+                        and isinstance(remote.get("content"), dict)
+                        and isinstance(remote["content"].get("prompt"), str)
+                        and remote["content"]["prompt"].strip()
+                        and all(remote.get(field) for field in ("version", "description"))):
                     return remote
-                return r
+                # A search hit is metadata, not a verified installable skill.
+                return None
 
         return None
 
@@ -110,7 +116,8 @@ class Registry:
                     "stars": item.get("stargazers_count", 0),
                     "downloads": 0,
                     "version": "1.0.0",
-                    "tags": [t["name"] for t in item.get("topics", []) if t["name"] != "ai-skill"],
+                    "tags": [t for t in (topic if isinstance(topic, str) else topic.get("name", "")
+                                     for topic in item.get("topics", [])) if t and t != "ai-skill"],
                     "repo_url": item.get("html_url", ""),
                     "default_branch": item.get("default_branch", "main"),
                 })
