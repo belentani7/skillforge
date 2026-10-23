@@ -185,13 +185,15 @@ def cmd_install(args):
         except Exception as e:
             installed_to.append(f"  ❌ {tool} → {e}")
 
-    # Record in database
-    registry.record_install(name, skill.get("version", "1.0.0"))
+    # Do not advertise a skill as installed when every filesystem write failed.
+    success_count = len([line for line in installed_to if "✅" in line])
+    if success_count:
+        registry.record_install(name, skill.get("version", "1.0.0"))
 
     print("  Installed to:")
     for line in installed_to:
         print(line)
-    print(f"\n  ⚒️  Spell \"{name}\" is now active in {len([l for l in installed_to if '✅' in l])} tool(s).")
+    print(f"\n  ⚒️  Spell \"{name}\" is now active in {success_count} tool(s).")
 
 
 def cmd_list(args):
@@ -276,18 +278,15 @@ def cmd_publish(args):
 
 
 def cmd_update(args):
-    """Update all installed skills to latest versions."""
+    """Upgrade only unmodified files that SkillForge can verify as its own."""
     print("\n🔄 Checking for spell updates...\n")
-
     db = get_db()
     config = load_config()
     registry = Registry(db, config)
     installer = Installer(db, config)
     converter = ConverterEngine()
 
-    cursor = db.execute("SELECT name, version FROM installed_skills")
-    installed = cursor.fetchall()
-
+    installed = db.execute("SELECT name, version FROM installed_skills").fetchall()
     if not installed:
         print("  No spells installed. Nothing to update.")
         return
@@ -295,28 +294,50 @@ def cmd_update(args):
     updated = 0
     for name, current_version in installed:
         latest = registry.check_version(name)
-        if latest and latest != current_version:
-            print(f"  📦 {name}: v{current_version} → v{latest}")
-            skill = registry.fetch(name)
-            if skill:
-                tools = installer.detect_tools() or ["claude", "codex", "aider", "qwen", "gemini"]
-                for tool in tools:
-                    try:
-                        content = converter.convert(skill, tool)
-                        installer.install(tool, name, content)
-                    except Exception:
-                        pass
-                registry.record_install(name, latest)
-                updated += 1
-        else:
+        if not latest or latest == current_version:
             print(f"  ✅ {name}: up to date (v{current_version})")
+            continue
 
-    print(f"\n  {updated} spell(s) updated.")
+        skill = registry.fetch(name)
+        if not skill:
+            print(f"  ⚠️  {name}: unable to fetch version {latest}; version unchanged")
+            continue
+
+        # Updates must target registered files, not newly detected tools.
+        recorded_tools = [
+            row[0] for row in db.execute(
+                "SELECT tool FROM skill_files WHERE skill_name = ?", (name,)
+            ).fetchall()
+        ]
+        tools = [tool for tool in recorded_tools if config.get("tools", {}).get(tool, True) is not False]
+        if not tools:
+            print(f"  ⚠️  {name}: no tracked tools to update; version unchanged")
+            continue
+
+        failures = []
+        for tool in tools:
+            try:
+                content = converter.convert(skill, tool)
+                installer.install(tool, name, content)
+            except Exception as error:
+                failures.append((tool, str(error)))
+
+        if failures:
+            print(f"  ⚠️  {name}: update partially blocked; version remains {current_version}")
+            for tool, reason in failures:
+                print(f"     {tool}: {reason}")
+        else:
+            registry.record_install(name, latest)
+            updated += 1
+            print(f"  ✅ {name}: v{current_version} → v{latest}")
+
+    print(f"\n  {updated} spell(s) fully updated.")
 
 
 def cmd_init(args):
     """Create a new skill from template."""
     name = args.name
+    Installer._validate_name(name)
     skill_dir = Path.cwd() / name
     print(f"\n📝 Crafting new spell: {name}...\n")
 
