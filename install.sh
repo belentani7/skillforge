@@ -1,167 +1,103 @@
 #!/usr/bin/env bash
-# ⚒️ SkillForge Installer
-# Installs SkillForge to ~/.skillforge and sets up PATH
+# SkillForge local installer. Never downloads or executes remote code.
 set -euo pipefail
 
+usage() { printf 'Usage: %s [--dry-run]\n' "${0##*/}"; }
+die() { printf 'SkillForge install refused: %s\n' "$*" >&2; exit 1; }
+DRY_RUN=0
+case "${1:-}" in
+  '') ;;
+  --dry-run) DRY_RUN=1 ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+[[ $# -le 1 ]] || { usage >&2; exit 2; }
+[[ -n "${HOME:-}" ]] || die 'HOME is not set'
+REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 FORGE_DIR="$HOME/.skillforge"
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[[ ! -L "$FORGE_DIR" ]] || die 'destination is a symbolic link'
+[[ -f "$REPO_DIR/skillforge" && -f "$REPO_DIR/database/schema.sql" ]] || die 'source package is incomplete'
 
-# ── ASCII Banner ──────────────────────────────────────────────
-cat "$REPO_DIR/ascii/forge.txt" 2>/dev/null || echo "⚒️  SkillForge Installer"
-
-echo ""
-echo "═══════════════════════════════════════════"
-echo "  ⚒️  SkillForge — The AI Skill Grimoire"
-echo "═══════════════════════════════════════════"
-echo ""
-
-# ── Step 1: Copy files to ~/.skillforge ──────────────────────
-echo "📦 Installing to $FORGE_DIR ..."
-if [ -d "$FORGE_DIR" ]; then
-    echo "   Existing installation found. Updating..."
-    # Preserve local database
-    if [ -f "$FORGE_DIR/local.db" ]; then
-        cp "$FORGE_DIR/local.db" "$FORGE_DIR/local.db.bak"
-    fi
+# Copy only application files, not a source-tree database, user configuration,
+# Git metadata, compiled Python caches, or files belonging to the user.
+FILES=(skillforge install.sh README.md LICENSE config/default.yaml)
+for pattern in \
+  "$REPO_DIR"/ascii/*.txt "$REPO_DIR"/database/*.sql \
+  "$REPO_DIR"/engine/*.py "$REPO_DIR"/format/*.py \
+  "$REPO_DIR"/registry/*.json "$REPO_DIR"/templates/*.skill; do
+  [[ -f "$pattern" ]] || continue
+  FILES+=("${pattern#"$REPO_DIR"/}")
+done
+if [[ -d "$FORGE_DIR" ]] && [[ -n "$(find "$FORGE_DIR" -type l -print -quit)" ]]; then
+  die 'destination contains symlinks; inspect them manually before upgrading'
 fi
-
-mkdir -p "$FORGE_DIR"
-cp -r "$REPO_DIR"/* "$FORGE_DIR/"
-
-# Restore database if preserved
-if [ -f "$FORGE_DIR/local.db.bak" ]; then
-    mv "$FORGE_DIR/local.db.bak" "$FORGE_DIR/local.db"
+for relative in "${FILES[@]}"; do
+  [[ -f "$REPO_DIR/$relative" && ! -L "$REPO_DIR/$relative" ]] || die "missing or linked source: $relative"
+  [[ ! -L "$FORGE_DIR/$relative" ]] || die "linked destination: $relative"
+done
+if [[ "$DRY_RUN" == 1 ]]; then
+  printf 'DRY RUN: would install %s application files to %s; keep local.db and config/user.yaml intact.\n' "${#FILES[@]}" "$FORGE_DIR"
+  exit 0
 fi
-
-# Make CLI executable
-chmod +x "$FORGE_DIR/skillforge"
-
-# ── Step 2: Detect installed AI tools ────────────────────────
-echo ""
-echo "🔍 Detecting installed AI tools..."
-
-TOOLS_DETECTED=()
-
-detect_tool() {
-    local name="$1"
-    local check_cmd="$2"
-    local check_dir="$3"
-
-    if command -v "$check_cmd" &>/dev/null || [ -d "$check_dir" ]; then
-        echo "   ✅ $name"
-        TOOLS_DETECTED+=("$name")
-    else
-        echo "   ⬜ $name (not found)"
-    fi
-}
-
-detect_tool "Claude Code" "claude" "$HOME/.claude"
-detect_tool "Codex" "codex" "$HOME/.codex"
-detect_tool "Aider" "aider" "$HOME/.aider"
-detect_tool "Qwen Code" "qwen" "$HOME/.qwen"
-detect_tool "Gemini CLI" "gemini" "$HOME/.gemini"
-
-if [ ${#TOOLS_DETECTED[@]} -eq 0 ]; then
-    echo ""
-    echo "   ⚠️  No AI tools detected. SkillForge will still install."
-    echo "   Install skills later when you add a tool."
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON=python3
+elif command -v python >/dev/null 2>&1; then
+  PYTHON=python
+else
+  die 'Python 3.10+ is required; no files changed'
 fi
+"$PYTHON" -c 'import sys; assert sys.version_info >= (3, 10), "Python 3.10+ required"' || die 'Python 3.10+ required; no files changed'
 
-# ── Step 3: Create default config ────────────────────────────
-echo ""
-echo "⚙️  Creating configuration..."
+if [[ "$REPO_DIR" != "$FORGE_DIR" ]]; then
+  for relative in "${FILES[@]}"; do
+    mkdir -p -- "$FORGE_DIR/$(dirname -- "$relative")"
+    cp -p -- "$REPO_DIR/$relative" "$FORGE_DIR/$relative"
+  done
+else
+  printf 'SkillForge: in-place installation; application files already present.\n'
+fi
+chmod u+x "$FORGE_DIR/skillforge"
 
-mkdir -p "$FORGE_DIR/config"
-
-# Generate config with detected tools
-cat > "$FORGE_DIR/config/user.yaml" <<YAML
-# SkillForge User Configuration
-# Generated on $(date -Iseconds)
-
-install_dir: $FORGE_DIR
+# An upgrade must never rewrite a person's preferences.
+if [[ ! -e "$FORGE_DIR/config/user.yaml" ]]; then
+  cat > "$FORGE_DIR/config/user.yaml" <<'YAML'
+# SkillForge user configuration; edit as needed. Preserved on upgrades.
 auto_update: false
 registry_url: https://api.github.com
-
-# Detected tools (edit to enable/disable)
 tools:
+  claude: true
+  codex: true
+  aider: true
+  qwen: true
+  gemini: true
 YAML
+fi
 
-for tool in claude codex aider qwen gemini; do
-    found="false"
-    for detected in "${TOOLS_DETECTED[@]}"; do
-        case "$detected" in
-            "Claude Code") [ "$tool" = "claude" ] && found="true" ;;
-            "Codex") [ "$tool" = "codex" ] && found="true" ;;
-            "Aider") [ "$tool" = "aider" ] && found="true" ;;
-            "Qwen Code") [ "$tool" = "qwen" ] && found="true" ;;
-            "Gemini CLI") [ "$tool" = "gemini" ] && found="true" ;;
-        esac
-    done
-    echo "  $tool: $found" >> "$FORGE_DIR/config/user.yaml"
-done
-
-echo "   ✅ Config written to $FORGE_DIR/config/user.yaml"
-
-# ── Step 4: Set up PATH ─────────────────────────────────────
-echo ""
-echo "🔗 Setting up PATH..."
-
-# Create symlink in ~/.local/bin if it exists, otherwise guide user
-if [ -d "$HOME/.local/bin" ]; then
-    ln -sf "$FORGE_DIR/skillforge" "$HOME/.local/bin/skillforge"
-    echo "   ✅ Symlinked to ~/.local/bin/skillforge"
-elif [ -d "$HOME/bin" ]; then
-    ln -sf "$FORGE_DIR/skillforge" "$HOME/bin/skillforge"
-    echo "   ✅ Symlinked to ~/bin/skillforge"
+# Preserve unrelated executables in PATH rather than replacing them.
+if [[ -d "$HOME/.local/bin" ]]; then
+  BIN_DIR="$HOME/.local/bin"
+elif [[ -d "$HOME/bin" ]]; then
+  BIN_DIR="$HOME/bin"
 else
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$FORGE_DIR/skillforge" "$HOME/.local/bin/skillforge"
-    echo "   ✅ Created ~/.local/bin/skillforge"
-    echo ""
-    echo "   ⚠️  Add this to your shell profile (~/.bashrc or ~/.zshrc):"
-    echo "      export PATH=\"\$HOME/.local/bin:\$PATH\""
+  BIN_DIR="$HOME/bin"
+  mkdir -p -- "$BIN_DIR"
+fi
+LINK="$BIN_DIR/skillforge"
+if [[ ! -e "$LINK""bash:" "
+
+  ln -s -- "$FORGE_DIR/skillforge" "$LINK"
+elif [[ ! -L "$LINK" || "$(readlink -- "$LINK")" != "$FORGE_DIR/skillforge" ]]; then
+  printf 'WARNING: existing PATH entry left untouched: %s\n' "$LINK" >&2
 fi
 
-# ── Step 5: Initialize database ──────────────────────────────
-echo ""
-echo "🗃️  Initializing local cache..."
-
-if command -v python3 &>/dev/null; then
-    PYTHON=python3
-elif command -v python &>/dev/null; then
-    PYTHON=python
-else
-    echo "   ⚠️  Python not found. Run 'skillforge' to initialize the database."
-    PYTHON=""
-fi
-
-if [ -n "$PYTHON" ]; then
-    if [ -f "$FORGE_DIR/database/schema.sql" ]; then
-        $PYTHON -c "
-import sqlite3, os
-db = sqlite3.connect('$FORGE_DIR/local.db')
-with open('$FORGE_DIR/database/schema.sql') as f:
-    db.executescript(f.read())
-db.close()
-print('   ✅ SQLite database initialized')
-" 2>/dev/null || echo "   ⚠️  Database init skipped (will auto-create on first use)"
-    fi
-fi
-
-# ── Done ──────────────────────────────────────────────────────
-echo ""
-echo "═══════════════════════════════════════════"
-echo "  ✅ SkillForge installed successfully!"
-echo ""
-echo "  Tools detected: ${#TOOLS_DETECTED[@]}"
-for t in "${TOOLS_DETECTED[@]}"; do
-    echo "    • $t"
-done
-echo ""
-echo "  Get started:"
-echo "    skillforge search code-review"
-echo "    skillforge install code-review"
-echo "    skillforge list"
-echo ""
-echo "  ⚒️  The forge is lit. Go craft some spells."
-echo "═══════════════════════════════════════════"
+# Pass paths as arguments; HOME may contain spaces, quotes, or Unicode.
+"$PYTHON" - "$FORGE_DIR" <<'PY'
+import pathlib
+import sqlite3
+import sys
+root = pathlib.Path(sys.argv[1])
+with sqlite3.connect(root / 'local.db') as db:
+    db.executescript((root / 'database/schema.sql').read_text(encoding='utf-8'))
+PY
+printf 'SkillForge installed at %s (existing database and preferences preserved).\n' "$FORGE_DIR"
+printf 'Run %s --help; add %s to PATH if needed.\n' "$FORGE_DIR/skillforge" "$BIN_DIR"
