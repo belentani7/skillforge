@@ -235,14 +235,19 @@ def cmd_uninstall(args):
     installer = Installer(db, config)
 
     removed = installer.uninstall(name)
+    # Files changed by a user or inherited from older versions remain tracked.
+    # Removing one tool's file must not make the other protected copies invisible.
+    from engine.installed_state import reconcile_after_uninstall
+    remaining = reconcile_after_uninstall(db, name)
 
     if removed:
-        db.execute("DELETE FROM installed_skills WHERE name = ?", (name,))
-        db.commit()
         print(f"  ✅ Removed from {len(removed)} location(s):")
         for path in removed:
             print(f"     {path}")
-    else:
+    if remaining:
+        print(f"  ⚠️  Retained {len(remaining)} protected/unverified tool installation(s): {', '.join(remaining)}")
+        print("     Inspect them manually; their files and inventory were preserved.")
+    elif not removed:
         print(f"  ⚠️  Spell \"{name}\" not found in local installation.")
 
     print()
