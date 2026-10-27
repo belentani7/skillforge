@@ -10,25 +10,25 @@
     ╚═══════════════════════════════════════╝
 ```
 
-SkillForge installs AI coding skills into **all your AI tools** automatically.
+SkillForge converts and installs selected AI coding skills into **detected, enabled tools** when you explicitly invoke `skillforge install`.
 Claude Code, Codex, Aider, Qwen Code, Gemini CLI — one command, every platform.
 
 Think: **npm/brew but for AI agent skills.**
 
 ---
 
-## 🚀 Install
+## 🚀 Install (local, reviewed source)
+
+Use a reviewed checkout of `belentani7/skillforge`; the repository is currently **public**. The installer **does not download code**, change GitHub visibility, or publish skills.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/skillforge/skillforge/main/install.sh | bash
+git clone git@github.com:belentani7/skillforge.git
+cd skillforge
+bash install.sh --dry-run
+bash install.sh
 ```
 
-Or clone and install manually:
-
-```bash
-git clone https://github.com/skillforge/skillforge.git ~/.skillforge
-~/.skillforge/install.sh
-```
+The Bash installer supports Linux/macOS/WSL with Python 3.10+. It preserves `~/.skillforge/local.db` and `config/user.yaml` on upgrades, refuses symlinked installation trees, and does not replace unrelated commands in PATH. It does **not** currently implement a full rollback or uninstall of the application itself. `skillforge uninstall <name>` removes only verified, unmodified skill files.
 
 ## ⚡ Quick Start
 
@@ -48,7 +48,7 @@ skillforge update
 # Create a new skill from template
 skillforge init my-awesome-skill
 
-# Publish your skill to the community registry
+# Validate a skill and get instructions for optional manual publication
 skillforge publish ./my-awesome-skill
 ```
 
@@ -130,38 +130,14 @@ skillforge/
 2. **Install** — Downloads the skill YAML, converts it to each detected tool's format, and places files in the correct locations
 3. **Convert** — Each tool has a converter that translates universal YAML → native format
 4. **Cache** — SQLite tracks installed skills, versions, and dependencies
-5. **Update** — Compares local versions against registry, updates changed skills
+5. **Update** — Compares local versions against registry and updates only verified, unmodified installed files
 
 ## ⚙️ Requirements
 
-- Python 3.7+ (stdlib only — no pip installs needed)
-- Git (for registry access)
+- Python 3.10+ (stdlib only — no pip installs needed)
+- Git only for cloning; remote registry search uses HTTPS and is optional
 - Linux / macOS / WSL
 
 ## 📄 License
 
-MIT — see below.
-
-```
-MIT License
-
-Copyright (c) 2026 SkillForge Contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
+MIT — see [LICENSE](LICENSE) for the canonical copyright and license text.
