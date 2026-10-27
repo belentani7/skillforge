@@ -14,6 +14,11 @@ esac
 [[ $# -le 1 ]] || { usage >&2; exit 2; }
 [[ -n "${HOME:-}" ]] || die 'HOME is not set'
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# Refuse symlinked package directories: -L on individual files does not
+# detect a symlinked parent (e.g. engine/ -> an unrelated folder).
+for directory in ascii config database engine format registry templates; do
+  [[ ! -L "$REPO_DIR/$directory" ]] || die "linked source directory: $directory"
+done
 FORGE_DIR="$HOME/.skillforge"
 [[ ! -L "$FORGE_DIR" ]] || die 'destination is a symbolic link'
 [[ -f "$REPO_DIR/skillforge" && -f "$REPO_DIR/database/schema.sql" ]] || die 'source package is incomplete'

@@ -90,6 +90,17 @@ class InstallScriptTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("symlinks", result.stderr)
 
+    def test_refuses_linked_source_directory_before_copy(self):
+        external = self.source.parent / "external-engine"
+        external.mkdir()
+        (external / "untrusted.py").write_text("# must never be copied\\n")
+        shutil.rmtree(self.source / "engine")
+        (self.source / "engine").symlink_to(external, target_is_directory=True)
+        result = self.run_installer()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("linked source directory: engine", result.stderr)
+        self.assertFalse(self.destination.exists())
+
     def test_refuses_linked_source_before_copy(self):
         (self.source / "engine/linked.py").symlink_to(self.source / "skillforge")
         result = self.run_installer()

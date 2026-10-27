@@ -19,7 +19,7 @@ Think: **npm/brew but for AI agent skills.**
 
 ## 🚀 Install (local, reviewed source)
 
-This repository is private. Use an authorized checkout; the installer **does not download code**, change GitHub visibility, or publish skills.
+Use a reviewed checkout of `belentani7/skillforge`; the repository is currently **public**. The installer **does not download code**, change GitHub visibility, or publish skills.
 
 ```bash
 git clone git@github.com:belentani7/skillforge.git
